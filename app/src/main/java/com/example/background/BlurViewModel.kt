@@ -20,6 +20,7 @@ import android.app.Application
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
+import androidx.lifecycle.LiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.work.*
@@ -33,9 +34,12 @@ class BlurViewModel(application : Application) : ViewModel() {
     internal var imageUri : Uri? = null
     internal var outputUri : Uri? = null
 
+    internal val outputWorkInfos: LiveData<List<WorkInfo>>
+
     init {
         imageUri = getImageUri(application.applicationContext)
         workerManager = WorkManager.getInstance(application)
+        outputWorkInfos = workerManager.getWorkInfosByTagLiveData(TAG_OUTPUT)
     }
 
     /**
@@ -43,13 +47,18 @@ class BlurViewModel(application : Application) : ViewModel() {
      * @param blurLevel The amount to blur the image
      */
     internal fun applyBlur(blurLevel : Int) {
-//        var continuation = workerManager.beginWith(OneTimeWorkRequest.from(CleanupWorker::class.java))
+        setOutputUri(null)
+        val constraints = Constraints.Builder().setRequiresCharging(true).build()
+        val cleanupRequest = OneTimeWorkRequest.Builder(CleanupWorker::class.java)
+            .setConstraints(constraints)
         var continuation = workerManager.beginUniqueWork(
             IMAGE_MANIPULATION_WORK_NAME,
             ExistingWorkPolicy.KEEP,
-            OneTimeWorkRequest.from(CleanupWorker::class.java)
+            cleanupRequest.build()
         )
-        val saveRequest = OneTimeWorkRequest.Builder(SaveImageToFileWorker::class.java).build()
+        val saveRequest = OneTimeWorkRequest.Builder(SaveImageToFileWorker::class.java)
+            .addTag(TAG_OUTPUT)
+            .build()
         for (i in 0 until blurLevel) {
             val blurRequest = OneTimeWorkRequestBuilder<BluerWorker>()
             if (i == 0) {
@@ -94,6 +103,10 @@ class BlurViewModel(application : Application) : ViewModel() {
         outputUri = uriOrNull(outputImageUri)
     }
 
+    internal fun cancelBlurWork() {
+        workerManager.cancelAllWork()
+    }
+
     class BlurViewModelFactory(private val application : Application) : ViewModelProvider.Factory {
 
         override fun <T : ViewModel?> create(modelClass : Class<T>) : T {
@@ -103,5 +116,9 @@ class BlurViewModel(application : Application) : ViewModel() {
                 throw IllegalArgumentException("Unknown ViewModel class")
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
     }
 }
