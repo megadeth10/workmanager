@@ -43,7 +43,12 @@ class BlurViewModel(application : Application) : ViewModel() {
      * @param blurLevel The amount to blur the image
      */
     internal fun applyBlur(blurLevel : Int) {
-        var continuation = workerManager.beginWith(OneTimeWorkRequest.from(CleanupWorker::class.java))
+//        var continuation = workerManager.beginWith(OneTimeWorkRequest.from(CleanupWorker::class.java))
+        var continuation = workerManager.beginUniqueWork(
+            IMAGE_MANIPULATION_WORK_NAME,
+            ExistingWorkPolicy.KEEP,
+            OneTimeWorkRequest.from(CleanupWorker::class.java)
+        )
         val saveRequest = OneTimeWorkRequest.Builder(SaveImageToFileWorker::class.java).build()
         for (i in 0 until blurLevel) {
             val blurRequest = OneTimeWorkRequestBuilder<BluerWorker>()
